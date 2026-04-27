@@ -1,0 +1,499 @@
+openapi: 3.0.0
+info:
+  title: Content Broadcasting System API
+  description: Backend API for school content distribution platform
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Development server
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Content
+    description: Content upload and management
+  - name: Approval
+    description: Principal approval workflow
+  - name: Broadcast
+    description: Public student-facing endpoints
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          example: john@school.com
+        password:
+          type: string
+          example: secret123
+        role:
+          type: string
+          enum: [principal, teacher]
+          example: teacher
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          example: john@school.com
+        password:
+          type: string
+          example: secret123
+    ContentObject:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        title:
+          type: string
+          example: Chapter 5 Maths Questions
+        description:
+          type: string
+          nullable: true
+          example: null
+        subject:
+          type: string
+          example: maths
+        file_url:
+          type: string
+          example: /uploads/1234567890-abc.png
+        file_type:
+          type: string
+          example: image/png
+        file_size:
+          type: integer
+          example: 2145958
+        uploaded_by:
+          type: integer
+          example: 2
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: approved
+        rejection_reason:
+          type: string
+          nullable: true
+          example: null
+        approved_by:
+          type: integer
+          nullable: true
+          example: 1
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        start_time:
+          type: string
+          format: date-time
+          nullable: true
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation successful
+        data:
+          type: object
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Error message
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: User registered successfully
+                data:
+                  id: 1
+                  name: John Doe
+                  email: john@school.com
+                  role: teacher
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already registered
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and get JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              example:
+                success: true
+                message: Login successful
+                data:
+                  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    id: 1
+                    name: John Doe
+                    email: john@school.com
+                    role: teacher
+        '401':
+          description: Invalid credentials
+
+  /api/content/upload:
+    post:
+      tags: [Content]
+      summary: Teacher uploads content (image file)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, subject, file]
+              properties:
+                title:
+                  type: string
+                  example: Chapter 5 Questions
+                subject:
+                  type: string
+                  example: maths
+                description:
+                  type: string
+                  example: End term question paper
+                file:
+                  type: string
+                  format: binary
+                start_time:
+                  type: string
+                  format: date-time
+                  example: "2026-04-27T10:00:00.000Z"
+                end_time:
+                  type: string
+                  format: date-time
+                  example: "2026-04-30T10:00:00.000Z"
+                rotation_duration:
+                  type: integer
+                  example: 5
+      responses:
+        '201':
+          description: Content uploaded successfully
+          content:
+            application/json:
+              example:
+                success: true
+                message: Content uploaded successfully. Awaiting principal approval.
+                data:
+                  id: 3
+                  title: Chapter 5 Questions
+                  subject: maths
+                  status: pending
+                  file_url: /uploads/1234567890-abc.png
+                  start_time: "2026-04-27T10:00:00.000Z"
+                  end_time: "2026-04-30T10:00:00.000Z"
+        '400':
+          description: Validation error or invalid file
+        '401':
+          description: Unauthorized
+        '403':
+          description: Only teachers can upload
+
+  /api/content/my:
+    get:
+      tags: [Content]
+      summary: Teacher views their own uploaded content
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of teacher content
+          content:
+            application/json:
+              example:
+                success: true
+                message: Content fetched successfully
+                data:
+                  - id: 2
+                    title: Chapter 5 Maths Questions
+                    subject: maths
+                    status: approved
+                    file_url: /uploads/abc.png
+                    start_time: "2026-04-27T00:00:00.000Z"
+                    end_time: "2026-04-30T00:00:00.000Z"
+        '401':
+          description: Unauthorized
+
+  /api/content/{id}:
+    get:
+      tags: [Content]
+      summary: Get single content item by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+      responses:
+        '200':
+          description: Content details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Teachers can only view their own content
+        '404':
+          description: Content not found
+
+  /api/approval/pending:
+    get:
+      tags: [Approval]
+      summary: Principal views all pending content
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of pending content
+          content:
+            application/json:
+              example:
+                success: true
+                message: Pending content fetched
+                data:
+                  - id: 3
+                    title: Chapter 6 Questions
+                    subject: maths
+                    status: pending
+                    uploader:
+                      id: 2
+                      name: Teacher Sharma
+                      email: teacher@school.com
+        '401':
+          description: Unauthorized
+        '403':
+          description: Principal access only
+
+  /api/approval/all:
+    get:
+      tags: [Approval]
+      summary: Principal views all content regardless of status
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: All content list
+          content:
+            application/json:
+              example:
+                success: true
+                message: All content fetched
+                data:
+                  - id: 1
+                    title: Chapter 5 Maths Questions
+                    status: rejected
+                    rejection_reason: Poor quality image
+                  - id: 2
+                    title: Chapter 5 Maths Questions
+                    status: approved
+        '401':
+          description: Unauthorized
+        '403':
+          description: Principal access only
+
+  /api/approval/{id}/approve:
+    patch:
+      tags: [Approval]
+      summary: Principal approves content
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+      responses:
+        '200':
+          description: Content approved
+          content:
+            application/json:
+              example:
+                success: true
+                message: Content approved successfully
+                data:
+                  id: 2
+                  status: approved
+                  approved_by: 1
+                  approved_at: "2026-04-27T17:44:10.000Z"
+        '401':
+          description: Unauthorized
+        '403':
+          description: Principal access only
+        '404':
+          description: Content not found
+
+  /api/approval/{id}/reject:
+    patch:
+      tags: [Approval]
+      summary: Principal rejects content with reason
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rejection_reason]
+              properties:
+                rejection_reason:
+                  type: string
+                  example: Poor quality image
+      responses:
+        '200':
+          description: Content rejected
+          content:
+            application/json:
+              example:
+                success: true
+                message: Content rejected
+                data:
+                  id: 1
+                  status: rejected
+                  rejection_reason: Poor quality image
+        '400':
+          description: Rejection reason is required
+        '401':
+          description: Unauthorized
+        '403':
+          description: Principal access only
+        '404':
+          description: Content not found
+
+  /content/live/{teacherId}:
+    get:
+      tags: [Broadcast]
+      summary: Get currently live content for a teacher (public)
+      description: >
+        Returns the currently active content for a teacher based on scheduling
+        and rotation logic. No authentication required. Students use this endpoint.
+        Returns content grouped by subject if no subject filter is applied.
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+        - name: subject
+          in: query
+          required: false
+          schema:
+            type: string
+          example: maths
+          description: Filter by subject (maths, science, etc.)
+      responses:
+        '200':
+          description: Currently live content or no content available
+          content:
+            application/json:
+              examples:
+                with_subject_filter:
+                  summary: Single subject response
+                  value:
+                    success: true
+                    message: Live content fetched
+                    data:
+                      id: 2
+                      title: Chapter 5 Maths Questions
+                      subject: maths
+                      status: approved
+                      file_url: /uploads/abc.png
+                      start_time: "2026-04-27T00:00:00.000Z"
+                      end_time: "2026-04-30T00:00:00.000Z"
+                without_subject_filter:
+                  summary: All subjects response
+                  value:
+                    success: true
+                    message: Live content fetched
+                    data:
+                      maths:
+                        id: 2
+                        title: Chapter 5 Maths Questions
+                        subject: maths
+                        file_url: /uploads/abc.png
+                      science:
+                        id: 5
+                        title: Science Chapter 1
+                        subject: science
+                        file_url: /uploads/def.png
+                no_content:
+                  summary: No content available
+                  value:
+                    success: true
+                    message: No content available
+                    data: null
+        '400':
+          description: Invalid teacher ID

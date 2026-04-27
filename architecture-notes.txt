@@ -1,0 +1,110 @@
+CONTENT BROADCASTING SYSTEM — ARCHITECTURE NOTES
+=================================================
+
+1. AUTHENTICATION & RBAC FLOW
+------------------------------
+- JWT-based authentication using jsonwebtoken
+- Passwords hashed with bcrypt (salt rounds: 10)
+- On login, server issues a signed JWT containing { id, role }
+- auth.middleware.js verifies token on every protected route
+- authorize(...roles) middleware checks req.user.role against allowed roles
+- Principal and Teacher permissions are strictly separated at route level
+- Public broadcasting API (/content/live) requires no authentication
+
+2. SUBJECT-BASED SYSTEM DESIGN
+--------------------------------
+- Each teacher+subject combination has its own ContentSlot record
+- ContentSlot is the grouping unit for rotation
+- Multiple content items belong to one slot via ContentSchedule
+- Subjects are normalized to lowercase for consistency
+- Independent rotation per subject — maths and science rotate separately
+
+3. UPLOAD HANDLING
+-------------------
+- Multer handles multipart/form-data
+- Files stored locally in /uploads directory
+- File validation: only jpg, png, gif allowed
+- Size limit: 10MB enforced by Multer
+- Filename: timestamp + random number to avoid collisions
+- file_url stored as relative path (/uploads/filename)
+- Static file serving via express.static
+
+4. APPROVAL WORKFLOW
+---------------------
+- Uploaded content starts with status: pending
+- Only principal role can approve or reject
+- Approval sets: status=approved, approved_by, approved_at
+- Rejection sets: status=rejected, rejection_reason (required)
+- Only approved content is eligible for broadcasting
+- Rejected content stores reason, visible to teacher via content detail endpoint
+
+5. SCHEDULING & ROTATION LOGIC
+--------------------------------
+- Teacher sets start_time and end_time per content item
+- rotation_duration (minutes) controls how long each content shows
+- ContentSchedule stores rotation_order and duration per content+slot
+
+Rotation algorithm (schedule.util.js):
+  a) Filter schedules where current time is within start_time and end_time
+  b) Sort by rotation_order
+  c) Calculate total cycle = sum of all durations in milliseconds
+  d) positionInCycle = currentTimestamp % totalCycleMs
+  e) Walk through slots, accumulating duration until position is found
+  f) Return content that owns that position
+
+This ensures:
+  - Deterministic rotation (same result for all students at same time)
+  - Continuous looping without any cron jobs or state
+  - Stateless — no database writes needed during rotation
+
+6. DATABASE DESIGN
+-------------------
+Tables:
+  users           — id, name, email, password_hash, role
+  content         — id, title, subject, file_url, status, uploaded_by,
+                    approved_by, start_time, end_time, rejection_reason
+  content_slots   — id, subject, teacher_id (one slot per teacher+subject)
+  content_schedule — id, content_id, slot_id, rotation_order, duration
+
+Key decisions:
+  - Separate slot and schedule tables for clean rotation tracking
+  - rotation_order in schedule allows manual reordering in future
+  - start_time/end_time on content (not schedule) — teacher controls visibility
+  - approved_by/approved_at on content for full audit trail
+
+7. FOLDER STRUCTURE
+--------------------
+src/
+  controllers/   — HTTP layer, request/response handling only
+  routes/        — Express router definitions
+  services/      — Business logic, database queries
+  middlewares/   — auth, upload, error handling
+  models/        — Sequelize model definitions + associations
+  utils/         — Reusable helpers (response formatter, scheduler)
+  config/        — DB connection, Swagger config
+uploads/         — Local file storage
+docs/            — Swagger YAML
+
+8. MIDDLEWARE USAGE
+--------------------
+- helmet()          — Sets secure HTTP headers
+- cors()            — Enables cross-origin requests
+- express.json()    — Parses JSON request bodies
+- authenticate      — Verifies JWT, attaches req.user
+- authorize(roles)  — Checks role-based access
+- handleUpload      — Multer wrapper with error handling
+
+9. SCALABILITY APPROACH
+------------------------
+Current (MVP):
+  - Local file storage
+  - Stateless rotation (no cron, no Redis needed for core logic)
+  - All DB queries use indexed foreign keys
+
+Future scaling additions:
+  - Redis: Cache /content/live responses (TTL = shortest rotation_duration)
+  - S3: Replace local storage for file uploads
+  - Rate limiting: express-rate-limit on public API
+  - Pagination: Add limit/offset to approval list endpoints
+  - Queue: Bull queue for approval notification emails to teachers
+  - CDN: Serve uploaded files via CloudFront instead of express.static
