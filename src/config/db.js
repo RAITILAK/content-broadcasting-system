@@ -19,6 +19,15 @@ const sequelize = new Sequelize(
 );
 
 const connectDB = async () => {
+
+  // Add this temporarily to see what values are being used
+  console.log('DB Config:', {
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    name: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD ? '***SET***' : 'UNDEFINED'
+  });
   await sequelize.authenticate();
   console.log('MySQL connected successfully');
 
