@@ -2,6 +2,14 @@
 
 A backend system that allows teachers to upload subject-based content, principals to approve it, and students to access live content via public API with automatic rotation.
 
+## 🚀 Live API
+**Base URL:** `https://content-broadcasting-system-production-322d.up.railway.app`
+
+## 📖 API Documentation
+Interactive Swagger docs:  
+👉 `https://content-broadcasting-system-production-322d.up.railway.app/api-docs`
+
+
 ## Tech Stack
 
 - Node.js + Express
